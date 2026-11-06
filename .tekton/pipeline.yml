@@ -1,0 +1,76 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: repo-url
+      type: string
+      default: https://github.com/kwangghee/ci-cd-final-project.git
+    - name: branch
+      type: string
+      default: main
+    - name: build-image
+      type: string
+      default: image-registry.openshift-image-registry.svc:5000/sn-labs-tqhuy812/ci-cd-final-project:latest
+  tasks:
+    - name: cleanup
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: cleanup
+    - name: git-clone
+      workspaces:
+        - name: output
+          workspace: output
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.branch)
+        - name: deleteExisting
+          value: "true"
+      runAfter:
+        - cleanup
+    - name: flake8
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: flake8
+      params:
+        - name: args
+          value: "service"
+      runAfter:
+        - git-clone
+    - name: nose
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: nose
+      params:
+        - name: args
+          value: "-v --with-spec --spec-color"
+      runAfter:
+        - flake8
+    - name: buildah
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: $(params.build-image)
+        - name: TLSVERIFY
+          value: "false"
+      runAfter:
+        - nose
